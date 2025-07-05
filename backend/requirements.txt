@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+pydantic
+requests
+beautifulsoup4
+chromadb
+sentence-transformers
+torch
+transformers
+pandas
+numpy
+googlesearch-python
+playwright

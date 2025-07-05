@@ -1,0 +1,114 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from classifier import is_valid_query
+from embeddings import get_embedding
+from db import query_db, add_to_db, clear_cache, get_cache_stats, list_cached_queries, debug_cache_content
+from query_processor import query_processor
+from typing import List, Optional
+
+app = FastAPI()
+
+# Add CORS middleware with wildcard origin for development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for development
+    allow_credentials=False,  # Must be False when allow_origins=["*"]
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class QueryRequest(BaseModel):
+    query: str
+
+class QueryResponse(BaseModel):
+    valid: bool
+    summary: str = None
+    from_cache: bool = False
+    urls_found: int = 0
+    content_scraped: int = 0
+    processing_time: float = 0.0
+    search_time: float = 0.0
+    scrape_time: float = 0.0
+    cache_similarity: float = 0.0
+
+class ScrapeRequest(BaseModel):
+    urls: List[str]
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "message": "Backend is running"}
+
+@app.get("/cache/stats")
+def get_cache_statistics():
+    """Get cache statistics"""
+    count = get_cache_stats()
+    queries = list_cached_queries()
+    return {
+        "cache_count": count,
+        "cached_queries": queries
+    }
+
+@app.post("/cache/clear")
+def clear_cache_endpoint():
+    """Clear the cache"""
+    clear_cache()
+    return {"message": "Cache cleared successfully"}
+
+@app.get("/cache/debug")
+def debug_cache():
+    """Debug cache contents"""
+    debug_cache_content()
+    return {"message": "Cache debug info printed to console"}
+
+@app.post("/classify")
+def classify_query(req: QueryRequest):
+    valid = is_valid_query(req.query)
+    return {"valid": valid}
+
+@app.post("/query", response_model=QueryResponse)
+def process_query(req: QueryRequest):
+    """Main query endpoint using the modular QueryProcessor"""
+    result = query_processor.process_query(req.query)
+    
+    return QueryResponse(
+        valid=result["valid"],
+        summary=result.get("summary"),
+        from_cache=result.get("from_cache", False),
+        urls_found=result.get("urls_found", 0),
+        content_scraped=result.get("content_scraped", 0),
+        processing_time=result.get("processing_time", 0.0),
+        search_time=result.get("search_time", 0.0),
+        scrape_time=result.get("scrape_time", 0.0),
+        cache_similarity=result.get("cache_similarity", 0.0)
+    )
+
+@app.post("/search-only")
+def search_only(req: QueryRequest):
+    """Endpoint to test search functionality only"""
+    result = query_processor.search_only(req.query)
+    return result
+
+@app.post("/scrape-only")
+def scrape_only(req: ScrapeRequest):
+    """Endpoint to test scraping functionality only"""
+    result = query_processor.scrape_only(req.urls)
+    return result
+
+@app.get("/")
+def root():
+    """Root endpoint with API information"""
+    return {
+        "message": "Ripplica Query Core API",
+        "version": "1.0.0",
+        "endpoints": {
+            "POST /query": "Process a query through the complete pipeline",
+            "POST /search-only": "Search DuckDuckGo for URLs only",
+            "POST /scrape-only": "Scrape content from provided URLs only",
+            "POST /classify": "Classify if a query is valid",
+            "GET /cache/stats": "Get cache statistics",
+            "POST /cache/clear": "Clear the cache",
+            "GET /cache/debug": "Debug cache contents",
+            "GET /health": "Health check"
+        }
+    }
