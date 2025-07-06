@@ -1633,3 +1633,19 @@ text,label
 "Driving distance between Agra and Mathura?",valid
 "Shortest route from Surat to Ahmedabad?",valid
 "How to get from Bhopal to Indore?",valid
+"Walk my dog",invalid
+"Feed my cat",invalid
+"Take my dog for a walk",invalid
+"Walk the dog",invalid
+"Take out the garbage",invalid
+"Water the plants",invalid
+"Clean my room",invalid
+"Do the laundry",invalid
+"Wash the dishes",invalid
+"Make my bed",invalid
+"Brush my teeth",invalid
+"Take a shower",invalid
+"Get dressed",invalid
+"Pack my bag",invalid
+"Lock the door",invalid
+"Turn off the lights",invalid

@@ -32,14 +32,14 @@ def summarize_with_timeout(summarizer, prompt, timeout_seconds):
         try:
             result = summarizer(
                 prompt,
-                min_length=30,
-                max_length=150,  # Shorter summary for faster generation
+                min_length=30,  # Reduced for shorter inputs
+                max_length=400,  # Balanced length
                 no_repeat_ngram_size=2,
                 repetition_penalty=1.2,
-                num_beams=2,  # Fewer beams for speed
+                num_beams=3,  # Balanced for quality and speed
                 early_stopping=True,
                 truncation=True,
-                do_sample=False  # Deterministic for speed
+                do_sample=False  # Deterministic for consistency
             )
             result_queue.put(result)
         except Exception as e:
@@ -72,15 +72,15 @@ def summarize(texts: List[str], query: str = "", timeout_seconds: int = 30) -> s
     if not texts:
         return "No content available to summarize."
 
-    # Combine all texts into one string, but limit total length
-    combined_text = "\n".join(texts)
+    # Combine all texts into one string
+    combined_text = "\n\n".join(texts)
     
     # Limit text length to prevent memory issues
     if len(combined_text) > 4000:
         combined_text = combined_text[:4000] + "..."
     
     if query:
-        # Add query context but keep it concise
+        # Add query context for focused summarization
         prompt = f"Query: {query}\n\nContent: {combined_text}"
     else:
         prompt = combined_text
@@ -94,12 +94,19 @@ def summarize(texts: List[str], query: str = "", timeout_seconds: int = 30) -> s
         if result is None:
             return f"Summary: Based on the available content, here's what was found regarding '{query}' if provided. The content has been processed but summarization took too long."
         
-        summary = result[0]["summary_text"].strip()
+        # Simple error handling
+        if not result or not isinstance(result, list) or len(result) == 0:
+            return f"Summary: Unable to generate summary. Please try again."
+        
+        summary = result[0].get("summary_text", "").strip()
+        
+        if not summary:
+            return f"Summary: Generated summary is empty. Please try again."
         
         # Ensure summary is relevant to query
         if query and len(summary) > 0:
             # Add query context to summary
-            summary = f"Based on the query '{query}': {summary}"
+            summary = f"{summary}"
         
         return summary
         

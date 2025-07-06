@@ -17,35 +17,7 @@ An intelligent, modular web query agent that validates, searches, scrapes, and s
 
 The system is designed as a pipeline of independent modules, each responsible for a single stage of the query process. This modularity makes the system robust, testable, and easy to extend.
 
-```
-User (UI/CLI)
-   |
-   v
-Query Validator (classifier.py)
-   |-- invalid --> Respond: Invalid Query
-   |
-   v
-Embed Query (embeddings.py)
-   |
-   v
-Vector DB Similarity Search (db.py + embeddings.py)
-   |-- match found --> Return Stored Summary
-   |
-   v
-Web Search (duckduckgo_search.py)
-   |
-   v
-Scrape Top 5 URLs (content_scraper.py)
-   |
-   v
-Summarize Results (summarizer.py)
-   |
-   v
-Store (db.py)
-   |
-   v
-Return Summary to User
-```
+![Architecture Diagram](architecture.png)
 
 **File Mapping for Each Stage:**
 

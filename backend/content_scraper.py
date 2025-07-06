@@ -12,20 +12,30 @@ import os
 from urllib.parse import urlparse
 
 def setup_driver():
-    """Setup Chrome driver with optimal settings"""
+    """Setup Chrome driver with optimal settings for better anti-bot evasion"""
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-plugins")
+    chrome_options.add_argument("--disable-images")  # Faster loading
+    chrome_options.add_argument("--disable-javascript")  # Sometimes helps with anti-bot
+    chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
+    chrome_options.add_experimental_option("prefs", {
+        "profile.default_content_setting_values.notifications": 2,
+        "profile.default_content_settings.popups": 0
+    })
     
     driver = webdriver.Chrome(options=chrome_options)
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    driver.execute_script("Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]})")
+    driver.execute_script("Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']})")
     return driver
 
 def scrape_content(url, timeout=15):
@@ -36,10 +46,30 @@ def scrape_content(url, timeout=15):
     try:
         print(f"Scraping: {url}")
         
-        # Initialize driver
-        driver = setup_driver()
+        # Try with JavaScript disabled first (faster, less likely to be blocked)
+        content = try_scrape_with_js_disabled(url, timeout)
         
-        # Navigate to URL with timeout
+        # If that fails, try with JavaScript enabled
+        if not content or len(content.strip()) < 50:
+            print("JavaScript-disabled scraping failed, trying with JavaScript enabled...")
+            content = try_scrape_with_js_enabled(url, timeout)
+        
+        if content:
+            print(f"Successfully extracted {len(content)} characters")
+        else:
+            print("All scraping methods failed")
+        
+    except Exception as e:
+        print(f"Error scraping {url}: {e}")
+        content = ""
+    
+    return content
+
+def try_scrape_with_js_disabled(url, timeout):
+    """Try scraping with JavaScript disabled"""
+    driver = None
+    try:
+        driver = setup_driver()
         driver.set_page_load_timeout(timeout)
         driver.get(url)
         
@@ -47,48 +77,84 @@ def scrape_content(url, timeout=15):
         wait = WebDriverWait(driver, timeout)
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
         
-        # Shorter wait for dynamic content
-        time.sleep(1)
-        
-        # Get page source
         page_source = driver.page_source
-        
-        # Parse with BeautifulSoup
         soup = BeautifulSoup(page_source, 'html.parser')
         
         # Remove script and style elements
         for script in soup(["script", "style", "nav", "header", "footer", "aside"]):
             script.decompose()
         
-        # Try multiple content extraction strategies
         content = extract_content_advanced(soup, url)
         
-        if not content or len(content.strip()) < 150:  # Increased minimum
-            print("Advanced extraction failed, trying fallback...")
+        if not content or len(content.strip()) < 50:
             content = extract_content_fallback(soup)
         
-        # Clean the content
         content = clean_content(content)
         
-        # Final quality check
-        if len(content.strip()) < 100:
-            print(f"Content too short after cleaning: {len(content)} chars")
-            content = ""
-        else:
-            print(f"Successfully extracted {len(content)} characters")
+        return content if len(content.strip()) >= 50 else ""
         
     except Exception as e:
-        print(f"Error scraping {url}: {e}")
-        content = ""
-    
+        print(f"JavaScript-disabled scraping failed: {e}")
+        return ""
     finally:
         if driver:
             try:
                 driver.quit()
             except:
                 pass
-    
-    return content
+
+def try_scrape_with_js_enabled(url, timeout):
+    """Try scraping with JavaScript enabled"""
+    driver = None
+    try:
+        # Create driver with JavaScript enabled
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+        
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        
+        driver.set_page_load_timeout(timeout)
+        driver.get(url)
+        
+        # Wait longer for JavaScript to load
+        wait = WebDriverWait(driver, timeout)
+        wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+        time.sleep(2)  # Wait for dynamic content
+        
+        page_source = driver.page_source
+        soup = BeautifulSoup(page_source, 'html.parser')
+        
+        # Remove script and style elements
+        for script in soup(["script", "style", "nav", "header", "footer", "aside"]):
+            script.decompose()
+        
+        content = extract_content_advanced(soup, url)
+        
+        if not content or len(content.strip()) < 50:
+            content = extract_content_fallback(soup)
+        
+        content = clean_content(content)
+        
+        return content if len(content.strip()) >= 50 else ""
+        
+    except Exception as e:
+        print(f"JavaScript-enabled scraping failed: {e}")
+        return ""
+    finally:
+        if driver:
+            try:
+                driver.quit()
+            except:
+                pass
 
 def extract_content_advanced(soup, url):
     """Advanced content extraction using multiple strategies with query relevance"""
@@ -143,7 +209,6 @@ def extract_content_advanced(soup, url):
             paragraph_text.append(text)
     
     if paragraph_text:
-        # Take the longest paragraphs (likely main content)
         paragraph_text.sort(key=len, reverse=True)
         content_parts.append(' '.join(paragraph_text[:10]))  # Top 10 paragraphs
     
@@ -156,7 +221,7 @@ def extract_content_advanced(soup, url):
         
         text = div.get_text(separator=' ', strip=True)
         # More strict filtering
-        if (len(text) > 400 and 
+        if (len(text) > 200 and 
             not any(skip in text.lower() for skip in ['menu', 'navigation', 'sidebar', 'footer', 'header', 'cookie', 'privacy', 'advertisement'])):
             content_parts.append(text)
     

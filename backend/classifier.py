@@ -46,7 +46,7 @@ VALID_EMBEDDINGS = model.encode(VALID_EXAMPLES)
 INVALID_EMBEDDINGS = model.encode(INVALID_EXAMPLES)
 
 def is_valid_query(query):
-    """Classify if a query is valid using similarity to examples"""
+    """Classify if a query is valid using similarity to examples from queries.csv"""
     if not query or not query.strip():
         return False
     
@@ -61,9 +61,8 @@ def is_valid_query(query):
     invalid_similarities = cosine_similarity(query_embedding, INVALID_EMBEDDINGS)[0]
     max_invalid_similarity = np.max(invalid_similarities)
     
-    # Determine if query is more similar to valid or invalid examples
-    # Use a threshold to avoid false positives
-    threshold = 0.4
+    # Use threshold to determine if query is more similar to valid or invalid examples
+    threshold = 0.25
     
     if max_valid_similarity > threshold and max_valid_similarity > max_invalid_similarity:
         print(f"Query '{query}' classified as VALID (valid_sim: {max_valid_similarity:.3f}, invalid_sim: {max_invalid_similarity:.3f})")

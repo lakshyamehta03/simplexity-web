@@ -18,7 +18,7 @@ const Index = () => {
     setCurrentQuery(query);
     setIsProcessing(true);
     setResults(null);
-
+    
     try {
       const result = await queryProcessor(query, setProcessingStep);
       setResults(result);

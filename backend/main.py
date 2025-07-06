@@ -35,6 +35,24 @@ class QueryResponse(BaseModel):
 class ScrapeRequest(BaseModel):
     urls: List[str]
 
+@app.get("/")
+def root():
+    """Root endpoint with API information"""
+    return {
+        "message": "Ripplica Query Core API",
+        "version": "1.0.0",
+        "endpoints": {
+            "POST /query": "Process a query through the complete pipeline",
+            "POST /search-only": "Search DuckDuckGo for URLs only",
+            "POST /scrape-only": "Scrape content from provided URLs only",
+            "POST /classify": "Classify if a query is valid",
+            "GET /cache/stats": "Get cache statistics",
+            "POST /cache/clear": "Clear the cache",
+            "GET /cache/debug": "Debug cache contents",
+            "GET /health": "Health check"
+        }
+    }
+
 @app.get("/health")
 def health_check():
     return {"status": "healthy", "message": "Backend is running"}
@@ -83,32 +101,16 @@ def process_query(req: QueryRequest):
         cache_similarity=result.get("cache_similarity", 0.0)
     )
 
+# For testing the search method
 @app.post("/search-only")
 def search_only(req: QueryRequest):
     """Endpoint to test search functionality only"""
     result = query_processor.search_only(req.query)
     return result
 
+# For testing the scrape method
 @app.post("/scrape-only")
 def scrape_only(req: ScrapeRequest):
     """Endpoint to test scraping functionality only"""
     result = query_processor.scrape_only(req.urls)
     return result
-
-@app.get("/")
-def root():
-    """Root endpoint with API information"""
-    return {
-        "message": "Ripplica Query Core API",
-        "version": "1.0.0",
-        "endpoints": {
-            "POST /query": "Process a query through the complete pipeline",
-            "POST /search-only": "Search DuckDuckGo for URLs only",
-            "POST /scrape-only": "Scrape content from provided URLs only",
-            "POST /classify": "Classify if a query is valid",
-            "GET /cache/stats": "Get cache statistics",
-            "POST /cache/clear": "Clear the cache",
-            "GET /cache/debug": "Debug cache contents",
-            "GET /health": "Health check"
-        }
-    }

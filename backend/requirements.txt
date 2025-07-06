@@ -11,3 +11,4 @@ pandas
 numpy
 googlesearch-python
 playwright
+selenium
