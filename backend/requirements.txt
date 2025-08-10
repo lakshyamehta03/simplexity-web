@@ -12,3 +12,9 @@ numpy
 googlesearch-python
 playwright
 selenium
+# LLM Classifier dependencies
+dataclasses
+typing-extensions
+# Cloud API dependencies
+requests
+python-dotenv

@@ -9,7 +9,9 @@ import time
 import re
 import json
 import os
+import concurrent.futures
 from urllib.parse import urlparse
+from typing import List, Dict, Any
 
 def setup_driver():
     """Setup Chrome driver with optimal settings for better anti-bot evasion"""
@@ -285,7 +287,7 @@ def clean_content(content):
     # Remove extra whitespace
     content = re.sub(r'\s+', ' ', content)
     
-    # Remove common unwanted patterns more aggressively
+    # Remove common unwanted patterns
     unwanted_patterns = [
         r'cookie|privacy policy|terms of service|advertisement|advertise|ads',
         r'subscribe|newsletter|sign up|log in|login|register|signup|signin',
@@ -328,45 +330,87 @@ def clean_content(content):
     
     return content
 
-def scrape_multiple_urls(urls, save_to_files=True, output_dir="scraped_content"):
-    """Scrape content from multiple URLs"""
+def scrape_multiple_urls(urls, save_to_files=True, output_dir="scraped_content", max_workers=5):
+    """Scrape content from multiple URLs in parallel"""
     results = []
+    successful_scrapes = 0
+    start_time = time.time()
     
     # Create output directory if saving to files
     if save_to_files:
         os.makedirs(output_dir, exist_ok=True)
     
-    for i, url in enumerate(urls, 1):
-        print(f"\n--- Scraping URL {i}/{len(urls)} ---")
-        
-        content = scrape_content(url)
-        
-        result = {
-            'url': url,
-            'content': content,
-            'length': len(content),
-            'success': len(content) > 100
-        }
-        
-        results.append(result)
-        
-        # Save to file if requested
-        if save_to_files and content:
-            domain = urlparse(url).netloc.replace('.', '_')
-            filename = f"{output_dir}/content_{i}_{domain}.txt"
+    print(f"Starting parallel scraping of {len(urls)} URLs with {max_workers} workers...")
+    
+    # Define a worker function to process each URL
+    def process_url(url_data):
+        idx, url = url_data
+        try:
+            print(f"Scraping URL {idx}/{len(urls)}: {url}")
+            content = scrape_content(url)
+            success = len(content) > 100
             
-            try:
-                with open(filename, 'w', encoding='utf-8') as f:
-                    f.write(f"URL: {url}\n")
-                    f.write(f"Length: {len(content)} characters\n")
-                    f.write("-" * 50 + "\n")
-                    f.write(content)
-                print(f"Saved to: {filename}")
-            except Exception as e:
-                print(f"Error saving file: {e}")
+            result = {
+                'url': url,
+                'content': content,
+                'length': len(content),
+                'success': success
+            }
+            
+            # Save to file if requested
+            if save_to_files and content:
+                domain = urlparse(url).netloc.replace('.', '_')
+                filename = f"{output_dir}/content_{idx}_{domain}.txt"
+                
+                try:
+                    with open(filename, 'w', encoding='utf-8') as f:
+                        f.write(f"URL: {url}\n")
+                        f.write(f"Length: {len(content)} characters\n")
+                        f.write("-" * 50 + "\n")
+                        f.write(content)
+                    print(f"✓ Saved to: {filename}")
+                except Exception as e:
+                    print(f"✗ Error saving file: {e}")
+            
+            if success:
+                print(f"✓ Successfully scraped {len(content)} characters from {url}")
+            else:
+                print(f"✗ Insufficient content from {url}")
+                
+            return result
+        except Exception as e:
+            print(f"✗ Error scraping {url}: {str(e)}")
+            return {
+                'url': url,
+                'content': "",
+                'length': 0,
+                'success': False,
+                'error': str(e)
+            }
+    
+    # Use ThreadPoolExecutor for parallel processing
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all scraping tasks
+        future_to_url = {executor.submit(process_url, (i, url)): url 
+                         for i, url in enumerate(urls, 1)}
         
-        # Small delay between requests
-        time.sleep(1)
+        # Process results as they complete
+        for future in concurrent.futures.as_completed(future_to_url):
+            url = future_to_url[future]
+            try:
+                result = future.result()
+                results.append(result)
+                if result['success']:
+                    successful_scrapes += 1
+            except Exception as e:
+                print(f"✗ Error processing result for {url}: {str(e)}")
+                results.append({
+                    'url': url,
+                    'content': "",
+                    'length': 0,
+                    'success': False,
+                    'error': str(e)
+                })
     
     # Save summary JSON
     if save_to_files:
@@ -377,6 +421,10 @@ def scrape_multiple_urls(urls, save_to_files=True, output_dir="scraped_content")
             print(f"\nSummary saved to: {summary_file}")
         except Exception as e:
             print(f"Error saving summary: {e}")
+    
+    elapsed_time = time.time() - start_time
+    print(f"\nParallel scraping completed in {elapsed_time:.2f} seconds")
+    print(f"Success: {successful_scrapes}/{len(urls)} URLs")
     
     return results
 
@@ -404,4 +452,4 @@ if __name__ == "__main__":
         print(f"   Success: {result['success']}")
         print(f"   Length: {result['length']} characters")
         if result['content']:
-            print(f"   Preview: {result['content'][:200]}...") 
+            print(f"   Preview: {result['content'][:200]}...")

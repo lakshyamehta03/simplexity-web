@@ -2,11 +2,12 @@
 Query Processor - Integrates all modular components for the /query endpoint
 """
 
-from classifier import is_valid_query
+from perplexity_classifier import get_perplexity_classifier
 from embeddings import get_embedding
 from db import query_db, add_to_db
 from duckduckgo_search import search_duckduckgo
-from content_scraper import scrape_content
+# Import scraping functions
+from content_scraper import scrape_content, scrape_multiple_urls
 from summarizer import summarize
 from typing import Dict, List
 import time
@@ -36,8 +37,11 @@ class QueryProcessor:
         
         # Step 1: Validate query
         print("Step 1: Classifying query...")
-        is_valid = is_valid_query(query)
-        print(f"Classification result: {is_valid}")
+        classifier = get_perplexity_classifier()
+        classification_result = classifier.classify_query(query)
+        is_valid = classification_result.is_valid
+        print(f"Classification result: {is_valid} (Confidence: {classification_result.confidence:.2f}, Intent: {classification_result.intent})")
+        
         
         if not is_valid:
             print("❌ Query rejected by classifier - stopping pipeline")
@@ -110,7 +114,7 @@ class QueryProcessor:
         return {'hit': False}
     
     def _search_and_scrape(self, query: str) -> Dict:
-        """Search DuckDuckGo and scrape content from found URLs"""
+        """Search DuckDuckGo and scrape content from found URLs in parallel"""
         search_start = time.time()
         
         # Search for URLs
@@ -127,29 +131,27 @@ class QueryProcessor:
                 'scrape_time': 0
             }
         
-        print(f"Found {len(urls)} URLs, starting to scrape...")
+        print(f"Found {len(urls)} URLs, starting parallel scraping...")
         
-        # Scrape content
+        # Scrape content in parallel
         scrape_start = time.time()
+        
+        # Use parallel scraping with max_workers=3 (can be adjusted)
+        max_workers = min(3, len(urls))  # Don't use more workers than URLs
+        scrape_results = scrape_multiple_urls(urls, save_to_files=False, max_workers=max_workers)
+        
+        # Extract successful content
         texts = []
         successful_scrapes = 0
         
-        for i, url in enumerate(urls, 1):
-            print(f"Scraping {i}/{len(urls)}: {url}")
-            try:
-                content = scrape_content(url)
-                if content and len(content.strip()) > 100:
-                    texts.append(content)
-                    successful_scrapes += 1
-                    print(f"✓ Scraped {len(content)} characters")
-                else:
-                    print(f"✗ Insufficient content")
-            except Exception as e:
-                print(f"✗ Error scraping {url}: {e}")
+        for result in scrape_results:
+            if result['success']:
+                texts.append(result['content'])
+                successful_scrapes += 1
         
         scrape_time = time.time() - scrape_start
         
-        print(f"Scraping complete: {successful_scrapes}/{len(urls)} successful")
+        print(f"Parallel scraping complete: {successful_scrapes}/{len(urls)} successful in {scrape_time:.2f}s")
         
         return {
             'urls_found': len(urls),
@@ -209,4 +211,4 @@ class QueryProcessor:
         }
 
 # Global instance for use in FastAPI endpoints
-query_processor = QueryProcessor() 
+query_processor = QueryProcessor()

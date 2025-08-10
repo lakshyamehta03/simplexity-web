@@ -17,11 +17,9 @@ export const Header = () => {
           <div className="flex items-center space-x-6 text-sm text-gray-600">
             <div className="flex items-center space-x-1">
               <Zap className="w-4 h-4" />
-              <span>AI Powered</span>
             </div>
             <div className="flex items-center space-x-1">
               <Database className="w-4 h-4" />
-              <span>Smart Caching</span>
             </div>
           </div>
         </div>

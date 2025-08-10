@@ -1,11 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from classifier import is_valid_query
+from perplexity_classifier import get_perplexity_classifier
 from embeddings import get_embedding
 from db import query_db, add_to_db, clear_cache, get_cache_stats, list_cached_queries, debug_cache_content
 from query_processor import query_processor
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 app = FastAPI()
 
@@ -35,6 +35,20 @@ class QueryResponse(BaseModel):
 class ScrapeRequest(BaseModel):
     urls: List[str]
 
+class ClassifyRequest(BaseModel):
+    query: str
+    provider: str = "groq"
+    use_cache: bool = True
+
+class ClassifyResponse(BaseModel):
+    is_valid: bool
+    confidence: float
+    intent: str
+    topic: str
+    quality_score: float
+    reasoning: str
+    suggested_improvements: List[str]
+
 @app.get("/")
 def root():
     """Root endpoint with API information"""
@@ -45,7 +59,7 @@ def root():
             "POST /query": "Process a query through the complete pipeline",
             "POST /search-only": "Search DuckDuckGo for URLs only",
             "POST /scrape-only": "Scrape content from provided URLs only",
-            "POST /classify": "Classify if a query is valid",
+            "POST /classify": "Classify a query with detailed analysis",
             "GET /cache/stats": "Get cache statistics",
             "POST /cache/clear": "Clear the cache",
             "GET /cache/debug": "Debug cache contents",
@@ -79,10 +93,24 @@ def debug_cache():
     debug_cache_content()
     return {"message": "Cache debug info printed to console"}
 
-@app.post("/classify")
-def classify_query(req: QueryRequest):
-    valid = is_valid_query(req.query)
-    return {"valid": valid}
+@app.post("/classify", response_model=ClassifyResponse)
+def classify_query(req: ClassifyRequest):
+    """Classify a query using Perplexity-style classifier"""
+    try:
+        classifier = get_perplexity_classifier(req.provider)
+        result = classifier.classify_query(req.query, use_cache=req.use_cache)
+        
+        return ClassifyResponse(
+            is_valid=result.is_valid,
+            confidence=result.confidence,
+            intent=result.intent,
+            topic=result.topic,
+            quality_score=result.quality_score,
+            reasoning=result.reasoning,
+            suggested_improvements=result.suggested_improvements
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Classification failed: {str(e)}")
 
 @app.post("/query", response_model=QueryResponse)
 def process_query(req: QueryRequest):
