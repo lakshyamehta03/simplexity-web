@@ -1,115 +1,82 @@
-from transformers import pipeline
-from typing import List
+from groq import Groq
 import os
-import time
-import threading
-import queue
+from dotenv import load_dotenv
+from pathlib import Path
 
-# Use a faster, lighter model for summarization
-MODEL_NAME = "facebook/bart-large-cnn"  # Much faster than LED-large
+# Load environment variables from .env
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 
-# Load the summarization pipeline once
-_summarizer = None
 
-def get_summarizer():
-    global _summarizer
-    if _summarizer is None:
-        device = 0 if os.environ.get("USE_CUDA", "0") == "1" else -1
-        _summarizer = pipeline(
-            "summarization",
-            MODEL_NAME,
-            device=device,
-            model_kwargs={"torch_dtype": "auto"}
-        )
-    return _summarizer
-
-def summarize_with_timeout(summarizer, prompt, timeout_seconds):
-    """Run summarization with timeout using threading"""
-    result_queue = queue.Queue()
-    exception_queue = queue.Queue()
-    
-    def run_summarization():
-        try:
-            result = summarizer(
-                prompt,
-                min_length=30,  # Reduced for shorter inputs
-                max_length=400,  # Balanced length
-                no_repeat_ngram_size=2,
-                repetition_penalty=1.2,
-                num_beams=3,  # Balanced for quality and speed
-                early_stopping=True,
-                truncation=True,
-                do_sample=False  # Deterministic for consistency
-            )
-            result_queue.put(result)
-        except Exception as e:
-            exception_queue.put(e)
-    
-    # Start summarization in a separate thread
-    thread = threading.Thread(target=run_summarization)
-    thread.daemon = True
-    thread.start()
-    
-    # Wait for result with timeout
-    try:
-        thread.join(timeout=timeout_seconds)
-        if thread.is_alive():
-            print("Summarization timed out")
-            return None
-        elif not exception_queue.empty():
-            raise exception_queue.get()
-        else:
-            return result_queue.get()
-    except queue.Empty:
-        print("Summarization timed out")
-        return None
-
-def summarize(texts: List[str], query: str = "", timeout_seconds: int = 30) -> str:
+def summarize(
+    focused_content: list[str],
+    query: str = "",
+    api_key: str = None,
+    model: str = "llama3-70b-8192",
+    max_tokens: int = 4096,
+    temperature: float = 0.3
+):
     """
-    Summarize the provided texts using a fast BART model.
-    If a query is provided, prepend it to the text to focus the summary.
+    Summarizes the contents of a list of strings using Groq LLM, tailored to a query.
     """
-    if not texts:
-        return "No content available to summarize."
+    if api_key is None:
+        api_key = os.getenv("GROQ_API_KEY")
 
-    # Combine all texts into one string
-    combined_text = "\n\n".join(texts)
-    
-    # Limit text length to prevent memory issues
-    if len(combined_text) > 4000:
-        combined_text = combined_text[:4000] + "..."
-    
-    if query:
-        # Add query context for focused summarization
-        prompt = f"Query: {query}\n\nContent: {combined_text}"
-    else:
-        prompt = combined_text
+    if not api_key:
+        raise ValueError("You must provide a GROQ_API_KEY!")
 
-    summarizer = get_summarizer()
-    
-    try:
-        # Use cross-platform timeout
-        result = summarize_with_timeout(summarizer, prompt, timeout_seconds)
-        
-        if result is None:
-            return f"Summary: Based on the available content, here's what was found regarding '{query}' if provided. The content has been processed but summarization took too long."
-        
-        # Simple error handling
-        if not result or not isinstance(result, list) or len(result) == 0:
-            return f"Summary: Unable to generate summary. Please try again."
-        
-        summary = result[0].get("summary_text", "").strip()
-        
-        if not summary:
-            return f"Summary: Generated summary is empty. Please try again."
-        
-        # Ensure summary is relevant to query
-        if query and len(summary) > 0:
-            # Add query context to summary
-            summary = f"{summary}"
-        
-        return summary
-        
-    except Exception as e:
-        print(f"Summarization error: {e}")
-        return f"Error generating summary: {str(e)}" 
+    if not focused_content or not isinstance(focused_content, list):
+        return "Provided content must be a non-empty list of strings."
+
+    # Join the list of strings into one coherent content block
+    content = "\n".join(focused_content)
+
+    # Build the prompt
+    prompt = (
+        f"Question: {query}\n\n"
+        f"Carefully read the following focused content extracted from multiple sources. "
+        f"Write a comprehensive, long, detailed, and well-structured answer to the user's question. "
+        f"If relevant, include main debates, viewpoints, context, definitions, and a high-level synthesis. "
+        f"Focus only on facts and reasoning found in the provided content. "
+        f"Do not provide generic or out-of-scope information.\n\n"
+        f"CONTENT:\n{content}\n\n"
+        f"===\n\n"
+        f"ANSWER:"
+    )
+
+    client = Groq(api_key=api_key)
+    completion = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": "You are a world-class expert writer and summarizer."},
+            {"role": "user", "content": prompt},
+        ],
+        max_tokens=max_tokens,
+        temperature=temperature
+    )
+
+    summary = completion.choices[0].message.content.strip()
+    return summary
+
+# ------------------------------
+# TESTING / USAGE CODE
+# ------------------------------
+# if __name__ == "__main__":
+#     FILEPATH = "scraped_content/focused_content_for_summarizer.txt"
+#     QUERY = "What is the capital of india? how did it become so?"  # Change as needed
+
+#     # Set your Groq API key
+#     GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")  # Or set as a string directly
+
+#     print(f"Summarizing '{FILEPATH}' via Groq for query: {QUERY}\n")
+#     summary = summarize(
+#         file_path=FILEPATH,
+#         query=QUERY,
+#         api_key=GROQ_API_KEY,
+#         model="llama3-70b-8192",   # Or "mixtral-8x7b-32768" for very long docs/answers
+#         max_tokens=4096,           # Increase as needed; Groq supports >4k output
+#         temperature=0.3
+#     )
+#     print("Current working directory:", os.getcwd())
+#     print("\n================ SUMMARY ================\n")
+#     print(summary)
+#     print("\n=========================================")

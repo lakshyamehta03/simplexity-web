@@ -5,7 +5,10 @@ from perplexity_classifier import get_perplexity_classifier
 from embeddings import get_embedding
 from db import query_db, add_to_db, clear_cache, get_cache_stats, list_cached_queries, debug_cache_content
 from query_processor import query_processor
+from content_scraper import scrape_content, scrape_multiple_urls
+from summarizer import summarize
 from typing import List, Optional, Dict, Any
+import time
 
 app = FastAPI()
 
@@ -32,9 +35,6 @@ class QueryResponse(BaseModel):
     scrape_time: float = 0.0
     cache_similarity: float = 0.0
 
-class ScrapeRequest(BaseModel):
-    urls: List[str]
-
 class ClassifyRequest(BaseModel):
     query: str
     provider: str = "groq"
@@ -49,6 +49,20 @@ class ClassifyResponse(BaseModel):
     reasoning: str
     suggested_improvements: List[str]
 
+class FullPipelineResponse(BaseModel):
+    valid: bool
+    summary: str = None
+    classification_result: ClassifyResponse = None
+    urls_found: int = 0
+    content_scraped: int = 0
+    processing_time: float = 0.0
+    search_time: float = 0.0
+    scrape_time: float = 0.0
+    summarization_time: float = 0.0
+
+class ScrapeRequest(BaseModel):
+    urls: List[str]
+
 @app.get("/")
 def root():
     """Root endpoint with API information"""
@@ -60,6 +74,7 @@ def root():
             "POST /search-only": "Search DuckDuckGo for URLs only",
             "POST /scrape-only": "Scrape content from provided URLs only",
             "POST /classify": "Classify a query with detailed analysis",
+            "POST /full-pipeline": "Execute full pipeline: classify, search, scrape, and summarize",
             "GET /cache/stats": "Get cache statistics",
             "POST /cache/clear": "Clear the cache",
             "GET /cache/debug": "Debug cache contents",
@@ -142,3 +157,40 @@ def scrape_only(req: ScrapeRequest):
     """Endpoint to test scraping functionality only"""
     result = query_processor.scrape_only(req.urls)
     return result
+
+@app.post("/full-pipeline", response_model=FullPipelineResponse)
+def execute_full_pipeline(req: QueryRequest):
+    """Execute the full pipeline: classify, search, scrape, and summarize"""
+    try:
+        # Use the query_processor's execute_full_pipeline method
+        result = query_processor.execute_full_pipeline(req.query)
+        
+        # Convert the classification_result to ClassifyResponse
+        classification_result = result.get("classification_result")
+        if classification_result:
+            classify_response = ClassifyResponse(
+                is_valid=classification_result.is_valid,
+                confidence=classification_result.confidence,
+                intent=classification_result.intent,
+                topic=classification_result.topic,
+                quality_score=classification_result.quality_score,
+                reasoning=classification_result.reasoning,
+                suggested_improvements=classification_result.suggested_improvements
+            )
+        else:
+            classify_response = None
+        
+        # Return the full pipeline response
+        return FullPipelineResponse(
+            valid=result.get("valid", False),
+            summary=result.get("summary", ""),
+            classification_result=classify_response,
+            urls_found=result.get("urls_found", 0),
+            content_scraped=result.get("content_scraped", 0),
+            processing_time=result.get("processing_time", 0.0),
+            search_time=result.get("search_time", 0.0),
+            scrape_time=result.get("scrape_time", 0.0),
+            summarization_time=result.get("summarization_time", 0.0)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Full pipeline execution failed: {str(e)}")

@@ -2,7 +2,6 @@ from sentence_transformers import SentenceTransformer
 import numpy as np
 
 # Use the same model as the classifier for consistency
-model = SentenceTransformer('all-MiniLM-L6-v2')
 
 def get_embedding(text):
     """Generate embedding vector for text using sentence transformers"""
@@ -49,32 +48,6 @@ def cosine_similarity(embedding1, embedding2):
     except Exception as e:
         print(f"✗ Error calculating similarity: {e}")
         return 0.0
-
-# def test_embeddings():
-#     """Test embedding functionality"""
-#     print("Testing embedding functionality...")
-    
-#     # Test single embedding
-#     text1 = "What is the capital of France?"
-#     embedding1 = get_embedding(text1)
-    
-#     text2 = "What is the capital of France?"
-#     embedding2 = get_embedding(text2)
-    
-#     text3 = "What is the weather like today?"
-#     embedding3 = get_embedding(text3)
-    
-#     # Test similarities
-#     sim_same = cosine_similarity(embedding1, embedding2)
-#     sim_different = cosine_similarity(embedding1, embedding3)
-    
-#     print(f"\nSimilarity between identical queries: {sim_same:.3f}")
-#     print(f"Similarity between different queries: {sim_different:.3f}")
-    
-#     # Test batch embeddings
-#     texts = ["Query 1", "Query 2", "Query 3"]
-#     batch_embeddings = get_embeddings_batch(texts)
-#     print(f"Batch embeddings shape: {batch_embeddings.shape}")
 
 if __name__ == "__main__":
     test_embeddings() 
