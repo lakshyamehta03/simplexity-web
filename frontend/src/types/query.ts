@@ -8,13 +8,21 @@ export interface Source {
 
 export interface QueryResult {
   originalQuery: string;
-  isValid: boolean;
+  valid: boolean;
+  is_valid: boolean;
+  is_time_sensitive: boolean;
   fromCache: boolean;
+  cachedQuery?: string;
   summary: string;
   sources: Source[];
   processingTime: number;
   timestamp: Date;
   similarityScore?: number;
+  urlsFound?: number;
+  contentScraped?: number;
+  searchTime?: number;
+  scrapeTime?: number;
+  cacheSimilarity?: number;
 }
 
 export interface ProcessingStep {

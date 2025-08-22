@@ -1,6 +1,9 @@
 from sentence_transformers import SentenceTransformer
 import numpy as np
 
+# Initialize the sentence transformer model
+model = SentenceTransformer('all-MiniLM-L6-v2')  # Fast and effective for similarity
+
 # Use the same model as the classifier for consistency
 
 def get_embedding(text):

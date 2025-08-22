@@ -46,6 +46,11 @@ def add_to_db(embedding, content, metadata=None):
 def query_db(embedding, query_text="", top_k=3, similarity_threshold=0.8):
     """Query ChromaDB for similar queries using vector similarity"""
     try:
+        print(f"    🔍 Querying ChromaDB cache...")
+        print(f"      Query text: '{query_text}'")
+        print(f"      Top-k: {top_k}")
+        print(f"      Threshold: {similarity_threshold}")
+        
         # Query the collection
         results = collection.query(
             query_embeddings=[embedding.tolist()],
@@ -53,8 +58,13 @@ def query_db(embedding, query_text="", top_k=3, similarity_threshold=0.8):
             include=['documents', 'metadatas', 'distances']
         )
         
+        print(f"    📊 Raw ChromaDB results:")
+        print(f"      IDs: {results['ids']}")
+        print(f"      Distances: {results['distances']}")
+        print(f"      Documents count: {len(results['documents'][0]) if results['documents'] else 0}")
+        
         if not results['ids'] or not results['ids'][0]:
-            print("No results found in cache")
+            print(f"    ❌ No results found in cache")
             return None
         
         # Get the best match
@@ -62,36 +72,90 @@ def query_db(embedding, query_text="", top_k=3, similarity_threshold=0.8):
         best_distance = results['distances'][0][best_match_idx]
         best_similarity = 1 - best_distance  # Convert distance to similarity
         
-        print(f"Cache query results:")
-        print(f"  Best similarity: {best_similarity:.3f}")
-        print(f"  Threshold: {similarity_threshold}")
-        print(f"  Query text: {query_text}")
+        # Get cached query for additional similarity check
+        cached_query = results['metadatas'][0][best_match_idx].get('query', '')
         
-        # Check if similarity meets threshold
-        if best_similarity >= similarity_threshold:
-            print(f"✓ Cache hit! Similarity: {best_similarity:.3f}")
+        # Calculate additional similarity metrics
+        word_similarity = calculate_word_similarity(query_text, cached_query)
+        semantic_similarity = best_similarity
+        
+        # Combine similarities (weighted average)
+        combined_similarity = (semantic_similarity * 0.7) + (word_similarity * 0.3)
+        
+        print(f"    🎯 Best match analysis:")
+        print(f"      Best distance: {best_distance:.3f}")
+        print(f"      Semantic similarity: {semantic_similarity:.3f}")
+        print(f"      Word similarity: {word_similarity:.3f}")
+        print(f"      Combined similarity: {combined_similarity:.3f}")
+        print(f"      Threshold: {similarity_threshold}")
+        
+        # Check if combined similarity meets threshold
+        if combined_similarity >= similarity_threshold:
+            print(f"    ✅ Cache hit! Combined similarity: {combined_similarity:.3f} >= threshold: {similarity_threshold}")
             
             # Get the best match
             best_document = results['documents'][0][best_match_idx]
             best_metadata = results['metadatas'][0][best_match_idx]
             
             # Add similarity to metadata
-            best_metadata['similarity'] = best_similarity
+            best_metadata['similarity'] = combined_similarity
+            best_metadata['semantic_similarity'] = semantic_similarity
+            best_metadata['word_similarity'] = word_similarity
+            
+            print(f"    📄 Retrieved document length: {len(best_document)} characters")
+            print(f"    🏷️  Metadata: {best_metadata}")
             
             return {
                 'documents': [best_document],
                 'metadatas': [best_metadata],
                 'distances': [results['distances'][0][best_match_idx]],
                 'ids': [results['ids'][0][best_match_idx]],
-                'similarity': best_similarity
+                'similarity': combined_similarity
             }
         else:
-            print(f"✗ Cache miss. Best similarity {best_similarity:.3f} < threshold {similarity_threshold}")
+            print(f"    ❌ Cache miss. Combined similarity {combined_similarity:.3f} < threshold {similarity_threshold}")
             return None
             
     except Exception as e:
-        print(f"✗ Error querying cache: {e}")
+        print(f"    💥 Error querying cache: {e}")
         return None
+
+def calculate_word_similarity(query1, query2):
+    """Calculate word-based similarity between two queries"""
+    try:
+        # Normalize queries
+        query1_words = set(query1.lower().split())
+        query2_words = set(query2.lower().split())
+        
+        # Remove common stop words
+        stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them'}
+        
+        query1_words = query1_words - stop_words
+        query2_words = query2_words - stop_words
+        
+        if not query1_words and not query2_words:
+            return 1.0  # Both queries are empty after removing stop words
+        
+        if not query1_words or not query2_words:
+            return 0.0  # One query is empty
+        
+        # Calculate Jaccard similarity
+        intersection = len(query1_words.intersection(query2_words))
+        union = len(query1_words.union(query2_words))
+        
+        jaccard_similarity = intersection / union if union > 0 else 0.0
+        
+        # Calculate word overlap similarity
+        overlap_similarity = intersection / max(len(query1_words), len(query2_words))
+        
+        # Combine both metrics
+        word_similarity = (jaccard_similarity * 0.6) + (overlap_similarity * 0.4)
+        
+        return word_similarity
+        
+    except Exception as e:
+        print(f"Error calculating word similarity: {e}")
+        return 0.0
 
 def clear_cache():
     """Clear all cached queries"""

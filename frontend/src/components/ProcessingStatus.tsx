@@ -1,6 +1,18 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { CheckCircle, Circle, Loader2 } from 'lucide-react';
+
+// Processing status logging utility
+const statusLog = {
+  info: (message: string, data?: any) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[STATUS-INFO ${timestamp}] ${message}`, data || '');
+  },
+  debug: (message: string, data?: any) => {
+    const timestamp = new Date().toISOString();
+    console.debug(`[STATUS-DEBUG ${timestamp}] ${message}`, data || '');
+  }
+};
 
 interface ProcessingStatusProps {
   currentStep: string;
@@ -21,6 +33,33 @@ export const ProcessingStatus: React.FC<ProcessingStatusProps> = ({ currentStep,
   };
 
   const currentStepIndex = getCurrentStepIndex();
+
+  // Log step changes and animations
+  useEffect(() => {
+    if (currentStep) {
+      statusLog.info('Processing step changed', { 
+        currentStep, 
+        stepIndex: currentStepIndex, 
+        stepName: steps[currentStepIndex]?.name || 'Unknown',
+        query 
+      });
+      
+      // Log animation state for each step
+      steps.forEach((step, index) => {
+        const isCompleted = index < currentStepIndex;
+        const isCurrent = index === currentStepIndex;
+        const isPending = index > currentStepIndex;
+        
+        if (isCompleted) {
+          statusLog.debug(`Step completed: ${step.name}`, { stepId: step.id, index });
+        } else if (isCurrent) {
+          statusLog.info(`Step active with spinning animation: ${step.name}`, { stepId: step.id, index });
+        } else if (isPending) {
+          statusLog.debug(`Step pending: ${step.name}`, { stepId: step.id, index });
+        }
+      });
+    }
+  }, [currentStep, currentStepIndex, query]);
 
   return (
     <Card className="p-6 bg-white/70 backdrop-blur-sm border-0 shadow-xl">

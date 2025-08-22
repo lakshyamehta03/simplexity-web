@@ -6,10 +6,14 @@ export interface QueryRequest {
 
 export interface QueryResponse {
   valid: boolean;
+  is_valid: boolean;
+  is_time_sensitive: boolean;
   summary: string | null;
   from_cache: boolean;
+  cached_query: string | null;
   urls_found: number;
   content_scraped: number;
+  scraped_urls: string[];
   processing_time: number;
   search_time: number;
   scrape_time: number;
@@ -119,4 +123,4 @@ class ApiService {
   }
 }
 
-export const apiService = new ApiService(); 
+export const apiService = new ApiService();

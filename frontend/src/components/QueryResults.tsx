@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ExternalLink, Clock, CheckCircle, Database } from 'lucide-react';
 import { QueryResult } from '../types/query';
+import ReactMarkdown from 'react-markdown';
 
 interface QueryResultsProps {
   result: QueryResult;
@@ -31,7 +32,13 @@ export const QueryResults: React.FC<QueryResultsProps> = ({ result }) => {
         <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-lg">
           <p className="text-blue-800 font-medium">"{result.originalQuery}"</p>
           <p className="text-blue-600 text-sm mt-1">
-            {result.isValid ? 'Valid search query' : 'Invalid query type'}
+            {result.is_valid ? 'Valid search query' : 'Invalid query type'}
+            {result.is_time_sensitive && ' • Time-sensitive'}
+            {result.fromCache && result.cachedQuery && (
+              <span className="block mt-1 text-xs text-blue-500">
+                Served from cache (original: "{result.cachedQuery}")
+              </span>
+            )}
           </p>
         </div>
       </Card>
@@ -40,9 +47,9 @@ export const QueryResults: React.FC<QueryResultsProps> = ({ result }) => {
       <Card className="p-6 bg-white/70 backdrop-blur-sm border-0 shadow-xl">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Summary</h3>
         <div className="prose prose-gray max-w-none">
-          <p className="text-gray-700 leading-relaxed whitespace-pre-line">
-            {result.summary}
-          </p>
+          <div className="text-gray-700 leading-relaxed">
+            <ReactMarkdown>{result.summary}</ReactMarkdown>
+          </div>
         </div>
       </Card>
 

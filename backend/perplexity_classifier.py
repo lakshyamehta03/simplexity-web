@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 class ClassificationResult:
     """Result of query classification"""
     is_valid: bool
+    is_time_sensitive: bool
     confidence: float
     intent: str = "OTHER"
     topic: str = ""
@@ -39,10 +40,15 @@ class ClassificationResult:
 class PerplexityStyleQueryClassifier:
     """
     Fast query classifier for a Perplexity-style AI assistant.
-    Classifies queries as VALID (information-seeking) or INVALID (action commands/nonsensical).
+    Classifies queries as VALID (information-seeking) or INVALID (action commands/nonsensical)
+    AND
+    TIME-SENSITIVE (requires up-to-date info) or NOT TIME-SENSITIVE (general knowledge).
 
     VALID queries are processed by the AI assistant for research and information retrieval.
     INVALID queries are rejected early to save resources.
+    
+    TIME-SENSITIVE queries require real-time data from the web.
+    NOT TIME-SENSITIVE queries can use cached data.
     """
 
     def __init__(self, provider: str = "groq", api_key: str = None):
@@ -55,35 +61,68 @@ class PerplexityStyleQueryClassifier:
         self.setup_provider()
 
         # Optimized prompt template based on research
-        self.prompt_template = """You are a query classifier for an AI assistant. Classify queries as VALID (information-seeking) or INVALID (action commands or nonsensical).
+#         self.prompt_template = """You are a query classifier for an AI assistant. Classify queries as VALID (information-seeking) or INVALID (action commands or nonsensical).
 
-VALID queries seek information, knowledge, explanations, or guidance:
-- Questions: "What is machine learning?"
-- How-to requests: "How to learn Python?"
-- Comparisons: "iPhone vs Android"
-- Explanations: "Explain quantum computing"
-- Research: "Latest AI developments"
-- Recommendations: "Best laptops for programming"
+# VALID queries seek information, knowledge, explanations, or guidance:
+# - Questions: "What is machine learning?"
+# - How-to requests: "How to learn Python?"
+# - Comparisons: "iPhone vs Android"
+# - Explanations: "Explain quantum computing"
+# - Research: "Latest AI developments"
+# - Recommendations: "Best laptops for programming"
 
-INVALID queries are action commands or nonsensical:
-- Device control: "Set alarm for 6am"
-- Communication: "Call my mom"
-- Booking/purchasing: "Book a hotel"
-- Personal tasks: "Remind me to buy milk"
-- Random text: "hello", "test test"
-- Nonsensical: "walk my apples for my dog"
+# INVALID queries are action commands or nonsensical:
+# - Device control: "Set alarm for 6am"
+# - Communication: "Call my mom"
+# - Booking/purchasing: "Book a hotel"
+# - Personal tasks: "Remind me to buy milk"
+# - Random text: "hello", "test test"
+# - Nonsensical: "walk my apples for my dog"
+
+# Examples:
+# Query: "What is the weather today?" → VALID
+# Query: "Set alarm for 5pm" → INVALID
+# Query: "How to make bread?" → VALID
+# Query: "Call John now" → INVALID
+# Query: "Compare electric vs gas cars" → VALID
+# Query: "Book flight to Paris" → INVALID
+
+# Classify this query: "{query}"
+
+# Answer with only: VALID or INVALID"""
+
+
+
+        # Time Sensitivity + Validity  Classifier
+        self.prompt_template = """You are a query classifier for an AI assistant. For each user query, you must:
+1. Classify as VALID (seeking information, knowledge, explanations, or guidance) or INVALID (action command, agent control, nonsense).
+2. Classify as TIME-SENSITIVE (needs up-to-date info, e.g. 'today', 'current', 'latest', dates, breaking news) or NOT TIME-SENSITIVE (general knowledge, facts, advice, history, definitions).
+
+Respond with:
+VALIDITY: (VALID or INVALID)
+TIME_SENSITIVITY: (TIME-SENSITIVE or NOT TIME-SENSITIVE)
 
 Examples:
-Query: "What is the weather today?" → VALID
-Query: "Set alarm for 5pm" → INVALID
-Query: "How to make bread?" → VALID
-Query: "Call John now" → INVALID
-Query: "Compare electric vs gas cars" → VALID
-Query: "Book flight to Paris" → INVALID
+---
+Query: "Compare electric cars vs gas cars"
+VALIDITY: VALID
+TIME_SENSITIVITY: NOT TIME-SENSITIVE
+REASON: General factual info.
 
-Classify this query: "{query}"
+Query: "What is the weather in Paris today?"
+VALIDITY: VALID
+TIME_SENSITIVITY: TIME-SENSITIVE
+REASON: Requires up-to-date weather data.
 
-Answer with only: VALID or INVALID"""
+Query: "Book me a flight"
+VALIDITY: INVALID
+TIME_SENSITIVITY: TIME-SENSITIVE
+REASON: An action command and also requires real-time info.
+
+---
+Classify this query.
+Query: "{query}"
+"""
 
         # Cache for results
         self.cache = {}
@@ -128,6 +167,7 @@ Answer with only: VALID or INVALID"""
         if not query or not query.strip():
             return ClassificationResult(
                 is_valid=False,
+                is_time_sensitive=False,
                 confidence=1.0,
                 intent="EMPTY_QUERY",
                 reasoning="Query is empty or contains only whitespace"
@@ -163,28 +203,41 @@ Answer with only: VALID or INVALID"""
                 result = response.json()
                 raw_response = result['choices'][0]['message']['content'].strip().upper()
 
-                # Extract VALID or INVALID from response
-                if "VALID" in raw_response and "INVALID" not in raw_response:
+                # Parse both validity and time sensitivity from response
+                is_valid = False
+                is_time_sensitive = False
+                confidence = 0.9
+                
+                # Parse validity
+                if "VALIDITY: VALID" in raw_response or ("VALID" in raw_response and "INVALID" not in raw_response):
                     is_valid = True
-                    confidence = 0.9
                     intent = self._determine_intent(query)
-                elif "INVALID" in raw_response:
+                elif "VALIDITY: INVALID" in raw_response or "INVALID" in raw_response:
                     is_valid = False
-                    confidence = 0.9
                     intent = "INVALID_QUERY"
                 else:
                     # Default to INVALID if response is unclear
                     is_valid = False
                     confidence = 0.5
                     intent = "UNCLEAR_RESPONSE"
+                
+                # Parse time sensitivity
+                if "TIME_SENSITIVITY: TIME-SENSITIVE" in raw_response or "TIME-SENSITIVE" in raw_response:
+                    is_time_sensitive = True
+                elif "TIME_SENSITIVITY: NOT TIME-SENSITIVE" in raw_response or "NOT TIME-SENSITIVE" in raw_response:
+                    is_time_sensitive = False
+                else:
+                    # Default based on query content
+                    is_time_sensitive = self._is_query_time_sensitive(query)
 
                 inference_time = (time.time() - start_time) * 1000  # Convert to ms
 
                 result = ClassificationResult(
                     is_valid=is_valid,
+                    is_time_sensitive=is_time_sensitive,
                     confidence=confidence,
                     intent=intent,
-                    reasoning=f"Classified as {'VALID' if is_valid else 'INVALID'} by {self.provider}",
+                    reasoning=f"Classified as {'VALID' if is_valid else 'INVALID'} and {'TIME-SENSITIVE' if is_time_sensitive else 'NOT TIME-SENSITIVE'} by {self.provider}",
                     inference_time_ms=inference_time
                 )
 
@@ -193,6 +246,7 @@ Answer with only: VALID or INVALID"""
                     self.cache[query] = result
 
                 logger.info(f"Query '{query}' classified as {'VALID' if is_valid else 'INVALID'} "
+                           f"and {'TIME-SENSITIVE' if is_time_sensitive else 'NOT TIME-SENSITIVE'} "
                            f"(confidence: {confidence:.3f}, intent: {intent}, time: {inference_time:.2f}ms)")
 
                 return result
@@ -203,6 +257,7 @@ Answer with only: VALID or INVALID"""
                 inference_time = (time.time() - start_time) * 1000
                 return ClassificationResult(
                     is_valid=False,
+                    is_time_sensitive=False,
                     confidence=0.0,
                     intent="ERROR",
                     reasoning=f"Classification error: {str(e)}",
@@ -229,6 +284,40 @@ Answer with only: VALID or INVALID"""
             return "FACTUAL_QUESTION"
         else:
             return "OTHER"
+    
+    def _is_query_time_sensitive(self, query: str) -> bool:
+        """Determine if a query is time-sensitive based on keywords"""
+        query_lower = query.lower()
+        
+        # Time-sensitive keywords
+        time_sensitive_keywords = [
+            'today', 'tomorrow', 'yesterday', 'now', 'current', 'latest', 'recent',
+            'breaking', 'live', 'upcoming', 'this week', 'this month', 'this year',
+            '2024', '2025', '2023', '2022', '2021', '2020', '2019', '2018', '2017',
+            'weather', 'stock', 'price', 'market', 'election', 'news', 'update',
+            'score', 'result', 'outcome', 'deadline', 'due date', 'schedule'
+        ]
+        
+        # Check for time-sensitive keywords
+        for keyword in time_sensitive_keywords:
+            if keyword in query_lower:
+                return True
+        
+        # Check for date patterns (YYYY, MM/DD, etc.)
+        import re
+        date_patterns = [
+            r'\b\d{4}\b',  # Year
+            r'\b\d{1,2}/\d{1,2}\b',  # MM/DD or M/D
+            r'\b\d{1,2}-\d{1,2}\b',  # MM-DD or M-D
+            r'\b(january|february|march|april|may|june|july|august|september|october|november|december)\b',
+            r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b'
+        ]
+        
+        for pattern in date_patterns:
+            if re.search(pattern, query_lower):
+                return True
+        
+        return False
 
     def batch_classify(self, queries: List[str]) -> List[ClassificationResult]:
         """Classify multiple queries efficiently"""
@@ -243,6 +332,7 @@ Answer with only: VALID or INVALID"""
                 logger.error(f"Failed to classify query '{query}': {e}")
                 results.append(ClassificationResult(
                     is_valid=False,
+                    is_time_sensitive=False,
                     confidence=0.0,
                     intent="ERROR",
                     reasoning=f"Classification failed: {str(e)}"
@@ -314,84 +404,3 @@ def classify_query_perplexity(query: str) -> ClassificationResult:
     """
     classifier = get_perplexity_classifier()
     return classifier.classify_query(query)
-
-# Test function
-if __name__ == "__main__":
-    # Test queries based on Perplexity-style requirements
-    test_queries = [
-        # VALID queries (information-seeking)
-        "What is machine learning?",
-        "How do I learn Python programming?",
-        "Compare iPhone vs Android",
-        "Explain artificial intelligence",
-        "Latest developments in AI",
-        "Best restaurants in New York",
-        "What are the symptoms of flu?",
-        "How does photosynthesis work?",
-
-        # INVALID queries (commands/nonsensical)
-        "Set alarm for 6am",
-        "Call my mom",
-        "Book a hotel in Paris",
-        "Send email to John",
-        "Play some music",
-        "Turn off the lights",
-        "Remind me to buy groceries",
-        "hello",
-        "test",
-        "walk my pet; add apples to grocery; set alarm for 5pm",
-        "efofjseofijesfo?",
-        "blah blah blah"
-    ]
-
-    # Initialize classifier
-    try:
-        classifier = PerplexityStyleQueryClassifier(
-            provider="groq",  # Recommended for speed
-            api_key=None  # Will use environment variable
-        )
-    except ValueError as e:
-        print(f"❌ Error: {e}")
-        print("💡 Please set your API key in the .env file:")
-        print("   GROQ_API_KEY=your-groq-api-key-here")
-        exit(1)
-
-    print("🚀 PERPLEXITY-STYLE QUERY CLASSIFIER")
-    print("=" * 50)
-    print("Testing query classification for AI assistant...")
-    print()
-
-    # Run batch classification
-    results = classifier.batch_classify(test_queries)
-
-    print("📊 CLASSIFICATION RESULTS:")
-    print("-" * 30)
-
-    for i, result in enumerate(results, 1):
-        status = "✅" if result.is_valid else "❌"
-        print(f"{status} Query {i}: {result.is_valid}")
-        print(f"   Intent: {result.intent}")
-        print(f"   Confidence: {result.confidence:.1f} | Time: {result.inference_time_ms:.1f}ms")
-        print()
-
-    # Show summary
-    stats = classifier.get_classification_stats()
-    print("📈 PERFORMANCE SUMMARY:")
-    print("-" * 30)
-    print(f"Total queries processed: {stats['total_queries']}")
-    print(f"VALID queries: {stats['valid_queries']}")
-    print(f"INVALID queries: {stats['invalid_queries']}")
-    print(f"Average response time: {stats['average_time_ms']}ms")
-    print(f"Validity rate: {stats['validity_rate']:.1%}")
-
-    # Test individual query
-    print()
-    print("🔍 INDIVIDUAL QUERY TEST:")
-    print("-" * 30)
-    test_query = "How do neural networks work?"
-    is_valid = classifier.is_query_valid(test_query)
-    print(f'Query: "{test_query}"')
-    print(f"Valid for AI processing: {is_valid}")
-
-    print("\n" + "=" * 50)
-    print("Test completed!") 
