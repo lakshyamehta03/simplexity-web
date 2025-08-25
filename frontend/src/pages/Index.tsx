@@ -99,7 +99,11 @@ const Index = () => {
       
       const data = await response.json();
       queryLog.info('Received response from backend', { data, processingTime: data.processing_time });
-
+      
+      // Add debug logging for scraped_urls
+      console.log('DEBUG: Frontend received scraped_urls:', data.scraped_urls);
+      console.log('DEBUG: Frontend scraped_urls count:', data.scraped_urls?.length || 0);
+      
       // Fallback mapping to existing shape used by UI
       const result: QueryResult = {
         originalQuery: query,
@@ -162,10 +166,10 @@ const Index = () => {
           {/* Hero Section */}
           <div className="text-center space-y-4">
             <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              Ripplica Query Agent
+              Simplexity
             </h1>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Intelligent web browser query agent that validates, searches, and summarizes information from the web
+              Intelligent web browser query agent that searches and summarizes information from the web
             </p>
           </div>
 

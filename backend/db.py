@@ -43,7 +43,7 @@ def add_to_db(embedding, content, metadata=None):
         print(f"✗ Error adding to cache: {e}")
         return None
 
-def query_db(embedding, query_text="", top_k=3, similarity_threshold=0.8):
+def query_db(embedding, query_text="", top_k=3, similarity_threshold=0.65):
     """Query ChromaDB for similar queries using vector similarity"""
     try:
         print(f"    🔍 Querying ChromaDB cache...")

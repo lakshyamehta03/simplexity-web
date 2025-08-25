@@ -330,7 +330,7 @@ def clean_content(content):
     
     return content
 
-def scrape_multiple_urls(urls, save_to_files=True, output_dir="scraped_content", max_workers=5):
+def scrape_multiple_urls(urls, save_to_files=False, output_dir="scraped_content", max_workers=5):
     """Scrape content from multiple URLs in parallel"""
     results = []
     successful_scrapes = 0

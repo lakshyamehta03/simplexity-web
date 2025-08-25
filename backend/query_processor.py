@@ -95,6 +95,7 @@ class QueryProcessor:
                     "cached_query": cache_result.get('cached_query', 'Unknown'),
                     "urls_found": 0,
                     "content_scraped": 0,
+                    "scraped_urls": [],  # Add this missing field
                     "processing_time": time.time() - start_time,
                     "search_time": 0.0,
                     "scrape_time": 0.0,
@@ -132,31 +133,6 @@ class QueryProcessor:
         extraction_time = time.time() - extraction_start
         print(f"✅ Focused extraction complete - reduced from {len(search_results['texts'])} to {len(focused_texts)} sources")
         
-        # Step 5: Save both original and focused content for comparison
-        # print("Step 5: Saving content for analysis...")
-        # try:
-        #     os.makedirs("scraped_content", exist_ok=True)
-            
-        #     # Save original combined content
-        #     combined_content_file = "scraped_content/combined_content_for_summarizer.txt"
-        #     with open(combined_content_file, 'w', encoding='utf-8') as f:
-        #         f.write(f"Query: {query}\n")
-        #         f.write(f"Number of sources: {len(search_results['texts'])}\n")
-        #         f.write("=" * 80 + "\n\n")
-        #         for i, text in enumerate(search_results['texts'], 1):
-        #             f.write(f"SOURCE {i}:\n")
-        #             f.write("-" * 40 + "\n")
-        #             f.write(text)
-        #             f.write("\n\n" + "=" * 80 + "\n\n")
-        #     print(f"✓ Original content saved to: {combined_content_file}")
-            
-        #     # Save focused content and comparison
-        #     save_focused_content(query, search_results['texts'], focused_texts, "scraped_content")
-            
-        # except Exception as e:
-        #     print(f"✗ Error saving content: {e}")
-        
-        # Step 6: Generate summary from focused content
         print("Step 6: Generating summary from focused content...")
         await self._emit_status_async(status_callback, "summarizing", {"info": "ai_analysis"})
         summary = await asyncio.to_thread(summarize, focused_texts, query)
@@ -252,7 +228,7 @@ class QueryProcessor:
         
         # Use parallel scraping with max_workers=3 (can be adjusted)
         max_workers = min(3, len(urls))  # Don't use more workers than URLs
-        scrape_results = scrape_multiple_urls(urls, save_to_files=True, output_dir="scraped_content", max_workers=max_workers)
+        scrape_results = scrape_multiple_urls(urls, save_to_files=False, output_dir="scraped_content", max_workers=max_workers)
         
         # Extract successful content
         texts = []
@@ -414,7 +390,7 @@ class QueryProcessor:
         # Use scrape_multiple_urls for parallel scraping
         texts = []
         successful_scrapes = 0
-        scrape_results = scrape_multiple_urls(urls, save_to_files=True, output_dir="scraped_content")
+        scrape_results = scrape_multiple_urls(urls, save_to_files=False, output_dir="scraped_content")
         
         for result in scrape_results:
             if result['success']:

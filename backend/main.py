@@ -314,25 +314,37 @@ def classify_query(req: ClassifyRequest):
         raise HTTPException(status_code=500, detail=f"Classification failed: {str(e)}")
 
 @app.post("/query", response_model=QueryResponse)
-def process_query(req: QueryRequest):
+async def process_query(req: QueryRequest):
     """Main query endpoint using the modular QueryProcessor"""
-    result = query_processor.process_query(req.query)
-    
-    return QueryResponse(
-        valid=result["valid"],
-        is_valid=result.get("is_valid", result["valid"]),
-        is_time_sensitive=result.get("is_time_sensitive", False),
-        summary=result.get("summary"),
-        from_cache=result.get("from_cache", False),
-        cached_query=result.get("cached_query"),
-        urls_found=result.get("urls_found", 0),
-        content_scraped=result.get("content_scraped", 0),
-        scraped_urls=result.get("scraped_urls", []),
-        processing_time=result.get("processing_time", 0.0),
-        search_time=result.get("search_time", 0.0),
-        scrape_time=result.get("scrape_time", 0.0),
-        cache_similarity=result.get("cache_similarity", 0.0)
-    )
+    try:
+        result = await query_processor.process_query(req.query)
+        scraped_urls = result.get("scraped_urls", [])
+        
+        # Debug logging for scraped_urls
+        logging.info(f"DEBUG: scraped_urls count: {len(scraped_urls)}")
+        logging.info(f"DEBUG: scraped_urls content: {scraped_urls}")
+        
+        response = QueryResponse(
+            valid=result["valid"],
+            is_valid=result.get("is_valid", result["valid"]),
+            is_time_sensitive=result.get("is_time_sensitive", False),
+            summary=result.get("summary"),
+            from_cache=result.get("from_cache", False),
+            cached_query=result.get("cached_query"),
+            urls_found=result.get("urls_found", 0),
+            content_scraped=result.get("content_scraped", 0),
+            scraped_urls=scraped_urls,
+            processing_time=result.get("processing_time", 0.0),
+            search_time=result.get("search_time", 0.0),
+            scrape_time=result.get("scrape_time", 0.0),
+            cache_similarity=result.get("cache_similarity", 0.0)
+        )
+        
+        logging.info(f"DEBUG: Response scraped_urls: {response.scraped_urls}")
+        return response
+    except Exception as e:
+        logging.error(f"Error processing query: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # For testing the search method
 @app.post("/search-only")
@@ -455,6 +467,12 @@ async def process_query_stream(ws_id: str, req: QueryRequest):
     query_duration = (datetime.now() - query_start).total_seconds()
     ws_logger.info(f"Streaming query processing completed - ws_id: {ws_id}, duration: {query_duration:.2f}s, valid: {result['valid']}, from_cache: {result.get('from_cache', False)}")
     
+    scraped_urls = result.get("scraped_urls", [])
+    
+    # Debug logging for streaming endpoint
+    ws_logger.info(f"DEBUG: Streaming endpoint scraped_urls count: {len(scraped_urls)}")
+    ws_logger.info(f"DEBUG: Streaming endpoint scraped_urls: {scraped_urls}")
+    
     return QueryResponse(
         valid=result["valid"],
         is_valid=result.get("is_valid", result["valid"]),
@@ -464,6 +482,7 @@ async def process_query_stream(ws_id: str, req: QueryRequest):
         cached_query=result.get("cached_query"),
         urls_found=result.get("urls_found", 0),
         content_scraped=result.get("content_scraped", 0),
+        scraped_urls=scraped_urls,
         processing_time=result.get("processing_time", 0.0),
         search_time=result.get("search_time", 0.0),
         scrape_time=result.get("scrape_time", 0.0),
