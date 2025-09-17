@@ -1,4 +1,4 @@
-Based on the classifier implementation and the goal of creating a Perplexity-like AI assistant, here are the clear requirements for query validity:
+Based on the classifier implementation and the goal of creating a Simplexity-like AI assistant, here are the clear requirements for query validity:
 
 ## ✅ **VALID Queries (Information Requests)**
 

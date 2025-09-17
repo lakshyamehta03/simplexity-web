@@ -11,7 +11,7 @@ def summarize(
     focused_content: list[str],
     query: str = "",
     api_key: str = None,
-    model: str = "llama3-70b-8192",
+    model: str = "llama-3.3-70b-versatile",
     max_tokens: int = 4096,
     temperature: float = 0.3
 ):
@@ -35,19 +35,20 @@ def summarize(
         f"Question: {query}\n\n"
         f"Carefully read the following focused content extracted from multiple sources. "
         f"Write a comprehensive, long, detailed, and well-structured answer to the user's question. "
+        f"Format your response using Markdown:\n"
+        f"Focus ONLY on clear, well-structured text with appropriate headings. "
         f"If relevant, include main debates, viewpoints, context, definitions, and a high-level synthesis. "
-        f"Focus only on facts and reasoning found in the provided content. "
-        f"Do not provide generic or out-of-scope information.\n\n"
         f"CONTENT:\n{content}\n\n"
         f"===\n\n"
-        f"ANSWER:"
+        f"ANSWER (in Markdown format):\n"
+        f""
     )
 
     client = Groq(api_key=api_key)
     completion = client.chat.completions.create(
         model=model,
         messages=[
-            {"role": "system", "content": "You are a world-class expert writer and summarizer."},
+            {"role": "system", "content": "You are a world-class expert writer and summarizer. Format your responses using ONLY simple Markdown with clear headings and plain text. Use ONLY headings (#, ##, ###) and plain text paragraphs. DO NOT use tables, code blocks, bullet points, numbered lists, bold, italic, or any other Markdown formatting that might cause rendering issues. Focus on clear, readable content with a logical heading structure."},
             {"role": "user", "content": prompt},
         ],
         max_tokens=max_tokens,
@@ -56,27 +57,3 @@ def summarize(
 
     summary = completion.choices[0].message.content.strip()
     return summary
-
-# ------------------------------
-# TESTING / USAGE CODE
-# ------------------------------
-# if __name__ == "__main__":
-#     FILEPATH = "scraped_content/focused_content_for_summarizer.txt"
-#     QUERY = "What is the capital of india? how did it become so?"  # Change as needed
-
-#     # Set your Groq API key
-#     GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")  # Or set as a string directly
-
-#     print(f"Summarizing '{FILEPATH}' via Groq for query: {QUERY}\n")
-#     summary = summarize(
-#         file_path=FILEPATH,
-#         query=QUERY,
-#         api_key=GROQ_API_KEY,
-#         model="llama3-70b-8192",   # Or "mixtral-8x7b-32768" for very long docs/answers
-#         max_tokens=4096,           # Increase as needed; Groq supports >4k output
-#         temperature=0.3
-#     )
-#     print("Current working directory:", os.getcwd())
-#     print("\n================ SUMMARY ================\n")
-#     print(summary)
-#     print("\n=========================================")

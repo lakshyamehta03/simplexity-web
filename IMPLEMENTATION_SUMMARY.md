@@ -5,7 +5,7 @@ This implementation adds intelligent query classification and caching logic to t
 
 ## Key Changes Made
 
-### 1. Backend Classification Logic (`backend/perplexity_classifier.py`)
+### 1. Backend Classification Logic (`backend/simplexity_classifier.py`)
 
 #### Updated `ClassificationResult` Dataclass
 - **Added**: `is_time_sensitive: bool` field

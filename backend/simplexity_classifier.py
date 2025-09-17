@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Perplexity-style query classifier using cloud APIs
+Simplexity-style query classifier using cloud APIs
 Fast and reliable classification for AI assistant queries
 """
 
@@ -37,9 +37,9 @@ class ClassificationResult:
         if self.suggested_improvements is None:
             self.suggested_improvements = []
 
-class PerplexityStyleQueryClassifier:
+class SimplexityStyleQueryClassifier:
     """
-    Fast query classifier for a Perplexity-style AI assistant.
+    Fast query classifier for a Simplexity-style AI assistant.
     Classifies queries as VALID (information-seeking) or INVALID (action commands/nonsensical)
     AND
     TIME-SENSITIVE (requires up-to-date info) or NOT TIME-SENSITIVE (general knowledge).
@@ -375,26 +375,26 @@ Query: "{query}"
         return result.is_valid
 
 # Global classifier instance
-_perplexity_classifier_instance = None
+_simplexity_classifier_instance = None
 
-def get_perplexity_classifier(provider: str = "groq") -> PerplexityStyleQueryClassifier:
+def get_simplexity_classifier(provider: str = "groq") -> SimplexityStyleQueryClassifier:
     """
-    Get or create a global Perplexity-style classifier instance
+    Get or create a global Simplexity-style classifier instance
     
     Args:
         provider: API provider to use (groq, together, openai)
         
     Returns:
-        PerplexityStyleQueryClassifier instance
+        SimplexityStyleQueryClassifier instance
     """
-    global _perplexity_classifier_instance
-    if _perplexity_classifier_instance is None:
-        _perplexity_classifier_instance = PerplexityStyleQueryClassifier(provider=provider)
-    return _perplexity_classifier_instance
+    global _simplexity_classifier_instance
+    if _simplexity_classifier_instance is None:
+        _simplexity_classifier_instance = SimplexityStyleQueryClassifier(provider=provider)
+    return _simplexity_classifier_instance
 
-def classify_query_perplexity(query: str) -> ClassificationResult:
+def classify_query_simplexity(query: str) -> ClassificationResult:
     """
-    Classify a query using Perplexity-style classifier
+    Classify a query using Simplexity-style classifier
     
     Args:
         query: The query to classify
@@ -402,5 +402,5 @@ def classify_query_perplexity(query: str) -> ClassificationResult:
     Returns:
         ClassificationResult object
     """
-    classifier = get_perplexity_classifier()
+    classifier = get_simplexity_classifier()
     return classifier.classify_query(query)

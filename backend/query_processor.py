@@ -2,14 +2,14 @@
 Query Processor - Integrates all modular components for the /query endpoint
 """
 
-from perplexity_classifier import get_perplexity_classifier, ClassificationResult
+from simplexity_classifier import get_simplexity_classifier
 from embeddings import get_embedding
 from db import query_db, add_to_db
 from duckduckgo_search import search_duckduckgo
-from content_scraper import scrape_content, scrape_multiple_urls
+from content_scraper import scrape_multiple_urls
 from summarizer import summarize
-from focused_extractor import extract_focused_content, save_focused_content
-from typing import Dict, List, Any, Callable, Optional
+from focused_extractor import extract_focused_content
+from typing import Dict, Any, Callable, Optional
 import time
 import os
 import asyncio
@@ -17,7 +17,7 @@ import asyncio
 class QueryProcessor:
     """Main query processor that orchestrates the entire workflow"""
     
-    def __init__(self, cache_threshold: float = 0.8, max_search_results: int = 5):
+    def __init__(self, cache_threshold: float = 0.7, max_search_results: int = 5):
         self.cache_threshold = cache_threshold
         self.max_search_results = max_search_results
     
@@ -40,7 +40,7 @@ class QueryProcessor:
         
         # Step 1: Validate query
         print("Step 1: Classifying query...")
-        classifier = get_perplexity_classifier()
+        classifier = get_simplexity_classifier()
         classification_result = await asyncio.to_thread(classifier.classify_query, query)
         is_valid = classification_result.is_valid
         is_time_sensitive = classification_result.is_time_sensitive
@@ -133,12 +133,12 @@ class QueryProcessor:
         extraction_time = time.time() - extraction_start
         print(f"✅ Focused extraction complete - reduced from {len(search_results['texts'])} to {len(focused_texts)} sources")
         
-        print("Step 6: Generating summary from focused content...")
+        print("Step 5: Generating summary from focused content...")
         await self._emit_status_async(status_callback, "summarizing", {"info": "ai_analysis"})
         summary = await asyncio.to_thread(summarize, focused_texts, query)
         
         # Step 7: Cache results
-        print("Step 7: Caching results...")
+        print("Step 6: Caching results...")
         await self._cache_results_async(query, summary, is_time_sensitive)
         
         print("✅ Pipeline completed successfully")
@@ -295,196 +295,6 @@ class QueryProcessor:
     async def _cache_results_async(self, query: str, summary: str, is_time_sensitive: bool = False):
         """Async version of cache results"""
         await asyncio.to_thread(self._cache_results, query, summary, is_time_sensitive)
-    
-    def search_only(self, query: str) -> Dict:
-        """Search only - no scraping"""
-        urls = search_duckduckgo(query, self.max_search_results)
-        return {
-            "query": query,
-            "urls_found": len(urls),
-            "urls": urls
-        }
-    
-    def scrape_only(self, urls: List[str]) -> Dict:
-        """Scrape only - no search"""
-        results = []
-        successful_scrapes = 0
-        
-        for url in urls:
-            try:
-                content = scrape_content(url)
-                success = bool(content and len(content.strip()) > 100)
-                if success:
-                    successful_scrapes += 1
-                
-                results.append({
-                    "url": url,
-                    "content_length": len(content) if content else 0,
-                    "success": success
-                })
-            except Exception as e:
-                results.append({
-                    "url": url,
-                    "content_length": 0,
-                    "success": False,
-                    "error": str(e)
-                })
-        
-        return {
-            "urls_processed": len(urls),
-            "results": results,
-            "successful_scrapes": successful_scrapes
-        }
-        
-    def execute_full_pipeline(self, query: str) -> Dict:
-        """Execute the full pipeline: classify, search, scrape, and summarize"""
-        start_time = time.time()
-        
-        # Step 1: Validate query
-        print(f"\n=== EXECUTING FULL PIPELINE FOR QUERY: '{query}' ===")
-        print("Step 1: Classifying query...")
-        classifier = get_perplexity_classifier()
-        classification_result = classifier.classify_query(query)
-        is_valid = classification_result.is_valid
-        is_time_sensitive = classification_result.is_time_sensitive
-        print(f"Classification result: {is_valid} (Confidence: {classification_result.confidence:.2f}, Intent: {classification_result.intent}, Time-sensitive: {is_time_sensitive})")
-        
-        if not is_valid:
-            print("❌ Query rejected by classifier - stopping pipeline")
-            return {
-                "valid": False,
-                "is_valid": False,
-                "is_time_sensitive": False,
-                "summary": "Query was classified as invalid.",
-                "classification_result": classification_result,
-                "processing_time": time.time() - start_time
-            }
-        
-        print("✅ Query passed classification - continuing pipeline")
-        
-        # Step 2: Search for URLs
-        print("Step 2: Searching for URLs...")
-        search_start = time.time()
-        search_result = self.search_only(query)
-        urls = search_result.get("urls", [])
-        search_time = time.time() - search_start
-        print(f"Found {len(urls)} URLs")
-        
-        if not urls:
-            return {
-                "valid": True,
-                "is_valid": True,
-                "is_time_sensitive": is_time_sensitive,
-                "summary": "No relevant URLs found for the query.",
-                "classification_result": classification_result,
-                "urls_found": 0,
-                "content_scraped": 0,
-                "processing_time": time.time() - start_time,
-                "search_time": search_time
-            }
-        
-        # Step 3: Scrape content from URLs
-        print("Step 3: Scraping content from URLs...")
-        scrape_start = time.time()
-        
-        # Use scrape_multiple_urls for parallel scraping
-        texts = []
-        successful_scrapes = 0
-        scrape_results = scrape_multiple_urls(urls, save_to_files=False, output_dir="scraped_content")
-        
-        for result in scrape_results:
-            if result['success']:
-                texts.append(result['content'])
-                successful_scrapes += 1
-                
-        scrape_time = time.time() - scrape_start
-        print(f"Successfully scraped {successful_scrapes}/{len(urls)} URLs")
-        
-        if not texts:
-            return {
-                "valid": True,
-                "is_valid": True,
-                "is_time_sensitive": is_time_sensitive,
-                "summary": "No content was successfully scraped from the found URLs.",
-                "classification_result": classification_result,
-                "urls_found": len(urls),
-                "content_scraped": 0,
-                "processing_time": time.time() - start_time,
-                "search_time": search_time,
-                "scrape_time": scrape_time
-            }
-        
-        # Step 4: Extract focused content from scraped data
-        print("Step 4: Extracting focused content...")
-        extraction_start = time.time()
-        
-        # Try Groq first, fallback to TextRank if not available
-        extraction_method = "groq" if os.getenv("GROQ_API_KEY") else "textrank"
-        print(f"Using extraction method: {extraction_method}")
-        
-        focused_texts = extract_focused_content(
-            query=query,
-            texts=texts,
-            method=extraction_method,
-            sentences_ratio=0.3
-        )
-        
-        extraction_time = time.time() - extraction_start
-        print(f"✅ Focused extraction complete - reduced from {len(texts)} to {len(focused_texts)} sources")
-        
-        # Step 5: Save both original and focused content for comparison
-        print("Step 5: Saving content for analysis...")
-        try:
-            os.makedirs("scraped_content", exist_ok=True)
-            
-            # Save original combined content
-            combined_content_file = "scraped_content/combined_content_for_summarizer.txt"
-            with open(combined_content_file, 'w', encoding='utf-8') as f:
-                f.write(f"Query: {query}\n")
-                f.write(f"Number of sources: {len(texts)}\n")
-                f.write("=" * 80 + "\n\n")
-                for i, text in enumerate(texts, 1):
-                    f.write(f"SOURCE {i}:\n")
-                    f.write("-" * 40 + "\n")
-                    f.write(text)
-                    f.write("\n\n" + "=" * 80 + "\n\n")
-            print(f"✓ Original content saved to: {combined_content_file}")
-            
-            # Save focused content and comparison
-            save_focused_content(query, texts, focused_texts, "scraped_content")
-            
-        except Exception as e:
-            print(f"✗ Error saving content: {e}")
-        
-        # Step 6: Summarize the focused content
-        print("Step 6: Summarizing focused content...")
-        summarize_start = time.time()
-        summary = summarize(focused_texts, query)
-        summarization_time = time.time() - summarize_start
-        print("✅ Summarization complete")
-        
-        # Step 7: Cache results
-        print("Step 7: Caching results...")
-        self._cache_results(query, summary, is_time_sensitive)
-        
-        print("✅ Full pipeline completed successfully")
-        
-        return {
-            "valid": True,
-            "is_valid": True,
-            "is_time_sensitive": is_time_sensitive,
-            "summary": summary,
-            "classification_result": classification_result,
-            "urls_found": len(urls),
-            "content_scraped": successful_scrapes,
-            "focused_sources": len(focused_texts),
-            "extraction_method": extraction_method,
-            "processing_time": time.time() - start_time,
-            "search_time": search_time,
-            "scrape_time": scrape_time,
-            "extraction_time": extraction_time,
-            "summarization_time": summarization_time
-        }
 
 # Global instance for use in FastAPI endpoints
 query_processor = QueryProcessor()

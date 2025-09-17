@@ -100,9 +100,9 @@ const Index = () => {
       const data = await response.json();
       queryLog.info('Received response from backend', { data, processingTime: data.processing_time });
       
-      // Add debug logging for scraped_urls
-      console.log('DEBUG: Frontend received scraped_urls:', data.scraped_urls);
-      console.log('DEBUG: Frontend scraped_urls count:', data.scraped_urls?.length || 0);
+      // Debug logging for scraped_urls - commented out for cleanup
+      // console.log('DEBUG: Frontend received scraped_urls:', data.scraped_urls);
+      // console.log('DEBUG: Frontend scraped_urls count:', data.scraped_urls?.length || 0);
       
       // Fallback mapping to existing shape used by UI
       const result: QueryResult = {

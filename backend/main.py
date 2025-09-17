@@ -2,11 +2,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from perplexity_classifier import get_perplexity_classifier
-from embeddings import get_embedding
+from simplexity_classifier import get_simplexity_classifier
+# from embeddings import get_embedding
 from db import query_db, add_to_db, clear_cache, get_cache_stats, list_cached_queries, debug_cache_content
 from query_processor import query_processor
-from content_scraper import scrape_content, scrape_multiple_urls
+# from content_scraper import scrape_content, scrape_multiple_urls
 from summarizer import summarize
 from typing import Optional, Dict, Any, List
 import time
@@ -295,9 +295,9 @@ def cosine_similarity(embedding1, embedding2):
 
 @app.post("/classify", response_model=ClassifyResponse)
 def classify_query(req: ClassifyRequest):
-    """Classify a query using Perplexity-style classifier"""
+    """Classify a query using Simplexity-style classifier"""
     try:
-        classifier = get_perplexity_classifier(req.provider)
+        classifier = get_simplexity_classifier(req.provider)
         result = classifier.classify_query(req.query, use_cache=req.use_cache)
         
         return ClassifyResponse(
@@ -321,8 +321,8 @@ async def process_query(req: QueryRequest):
         scraped_urls = result.get("scraped_urls", [])
         
         # Debug logging for scraped_urls
-        logging.info(f"DEBUG: scraped_urls count: {len(scraped_urls)}")
-        logging.info(f"DEBUG: scraped_urls content: {scraped_urls}")
+        # logging.info(f"DEBUG: scraped_urls count: {len(scraped_urls)}")
+        # logging.info(f"DEBUG: scraped_urls content: {scraped_urls}")
         
         response = QueryResponse(
             valid=result["valid"],
@@ -340,25 +340,23 @@ async def process_query(req: QueryRequest):
             cache_similarity=result.get("cache_similarity", 0.0)
         )
         
-        logging.info(f"DEBUG: Response scraped_urls: {response.scraped_urls}")
+        # logging.info(f"DEBUG: Response scraped_urls: {response.scraped_urls}")
         return response
     except Exception as e:
         logging.error(f"Error processing query: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# For testing the search method
-@app.post("/search-only")
-def search_only(req: QueryRequest):
-    """Endpoint to test search functionality only"""
-    result = query_processor.search_only(req.query)
-    return result
+# @app.post("/search-only")
+# def search_only(req: QueryRequest):
+#     """Endpoint to test search functionality only"""
+#     result = query_processor.search_only(req.query)
+#     return result
 
-# For testing the scrape method
-@app.post("/scrape-only")
-def scrape_only(req: ScrapeRequest):
-    """Endpoint to test scraping functionality only"""
-    result = query_processor.scrape_only(req.urls)
-    return result
+# @app.post("/scrape-only")
+# def scrape_only(req: ScrapeRequest):
+#     """Endpoint to test scraping functionality only"""
+#     result = query_processor.scrape_only(req.urls)
+#     return result
 
 @app.post("/full-pipeline", response_model=FullPipelineResponse)
 def execute_full_pipeline(req: QueryRequest):
@@ -470,8 +468,8 @@ async def process_query_stream(ws_id: str, req: QueryRequest):
     scraped_urls = result.get("scraped_urls", [])
     
     # Debug logging for streaming endpoint
-    ws_logger.info(f"DEBUG: Streaming endpoint scraped_urls count: {len(scraped_urls)}")
-    ws_logger.info(f"DEBUG: Streaming endpoint scraped_urls: {scraped_urls}")
+    # ws_logger.info(f"DEBUG: Streaming endpoint scraped_urls count: {len(scraped_urls)}")
+    # ws_logger.info(f"DEBUG: Streaming endpoint scraped_urls: {scraped_urls}")
     
     return QueryResponse(
         valid=result["valid"],
